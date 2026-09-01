@@ -1,0 +1,37 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Evaluation fixtures and outputs are local. Only the attribution file is tracked.
+data/*
+!data/input/
+data/input/*
+!data/input/ATTRIBUTION.md
+output/
+
+# Model weights are downloaded on first use, never vendored.
+assets/models/*
+!assets/models/README.md
+
+# No images in this repository, anywhere. Decided deliberately: the reference results are
+# derived from a personal photograph, and the test fixtures are CC BY-SA and are fetched by
+# `scripts/fetch_test_images.py` rather than vendored. The rule is global rather than
+# root-level so that an image dropped into docs/ or scripts/ cannot be committed by accident.
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.tif
+*.tiff
+*.bmp
+*.gif
+*.heic
+*.mp4
+*.mov

@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portrait-engine"
+version = "0.1.0"
+description = "A programmable engine for professional portrait retouching. Deep learning perceives the face, classical image processing performs the edit. No generative models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "Alma Franca" }]
+keywords = ["portrait", "retouching", "computer-vision", "image-processing", "face-parsing"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.10",
+    "mediapipe>=0.10.18",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# Optional BiSeNet face-parsing backend. Review the weight license before commercial use;
+# see docs/THIRD_PARTY.md.
+parsing = ["onnxruntime>=1.17"]
+api = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5"]
+all = [
+    "onnxruntime>=1.17",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "python-multipart>=0.0.9",
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+portrait-retouch = "portrait_engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["portrait_engine*"]
+
+[tool.setuptools.package-data]
+portrait_engine = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: needs the MediaPipe model and a real photo",
+    "network: downloads the landmarker model on first run",
+]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",    # long lines are handled by the formatter
+    "B008",    # FastAPI dependency defaults
+    "RUF001",  # ambiguous unicode in docstrings
+    "SIM108",  # ternaries are not always clearer
+    "RUF046",  # false positive: round() on a numpy scalar returns a numpy scalar, not an int,
+               # so int(round(...)) is required wherever a value comes from FaceGeometry
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
