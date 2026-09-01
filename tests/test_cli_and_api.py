@@ -102,7 +102,7 @@ def test_health(client):
 def test_tools_endpoint_serves_the_contracts(client):
     schemas = client.get("/tools").json()
     assert {schema["name"] for schema in schemas} == {
-        "skin_cleanup", "skin_smoothing", "reduce_dark_circles",
+        "skin_cleanup", "skin_smoothing", "equalize_skin_tone", "reduce_dark_circles",
         "whiten_teeth", "balance_face_lighting",
     }
     for schema in schemas:

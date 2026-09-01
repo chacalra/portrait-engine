@@ -103,6 +103,7 @@ def permitted_region(analysis: FaceAnalysis, tools: Iterable[str]) -> np.ndarray
     per_tool = {
         "skin_cleanup": ("skin",),
         "skin_smoothing": ("skin",),
+        "equalize_skin_tone": ("skin",),
         "reduce_dark_circles": ("left_under_eye", "right_under_eye"),
         "whiten_teeth": ("teeth",),
         "balance_face_lighting": ("face_photometric",),

@@ -14,6 +14,7 @@ import pytest
 from portrait_engine import (
     StrengthOutOfRangeError,
     balance_face_lighting,
+    equalize_skin_tone,
     reduce_dark_circles,
     skin_cleanup,
     skin_smoothing,
@@ -25,6 +26,7 @@ from portrait_engine.tools import TOOL_REGISTRY
 ALL_TOOLS = (
     skin_cleanup,
     skin_smoothing,
+    equalize_skin_tone,
     reduce_dark_circles,
     whiten_teeth,
     balance_face_lighting,
@@ -391,6 +393,52 @@ def test_dark_circles_stay_inside_the_gamut(portrait_paths, analyzer):
         pytest.skip("no fixture has a usable infraorbital region")
 
 
+# --------------------------------------------------------------------------- skin tone
+
+
+def test_skin_tone_never_touches_luminance(portrait, analysis):
+    """The safety guarantee of this tool, and it is structural rather than a tunable limit.
+
+    Only a* and b* are written, so modelling, texture and the three-dimensional form of the
+    face cannot be affected at any strength. If this ever fails, the tool has become a
+    dodge-and-burn operator and can reshape a face photometrically.
+    """
+    result = equalize_skin_tone(portrait.rgb, analysis, 1.0)
+    if not result.changed:
+        pytest.skip("no usable skin region")
+    before = rgb_to_lab(portrait.rgb)[..., 0]
+    after = rgb_to_lab(result.image)[..., 0]
+    region = analysis.masks["skin"] > 0.5
+    # A tolerance, not equality: the edit round-trips through sRGB and back, so 8-bit
+    # quantisation moves L* very slightly even though nothing wrote to it.
+    assert float(np.abs(after - before)[region].max()) < 0.5
+
+
+def test_skin_tone_reduces_regional_spread(portrait, analysis):
+    """Judged on the defect it exists to fix, not on its own parameters."""
+    result = equalize_skin_tone(portrait.rgb, analysis, 1.0)
+    if not result.changed:
+        pytest.skip("no usable skin region")
+    before = result.stats["region_spread_a_before"]
+    after = result.stats["region_spread_a_after"]
+    if before < 1.0:
+        pytest.skip("this fixture has almost no regional colour variation to correct")
+    assert after < before, f"regional a* spread went {before:.2f} -> {after:.2f}"
+
+
+def test_skin_tone_preserves_texture(portrait, analysis):
+    """A low-frequency chroma shift cannot alter detail. This pins that it stays low-frequency."""
+    from portrait_engine.core import ops
+
+    result = equalize_skin_tone(portrait.rgb, analysis, 1.0)
+    if not result.changed:
+        pytest.skip("no usable skin region")
+    mask = analysis.masks["skin"]
+    before = ops.high_frequency_energy(rgb_to_lab(portrait.rgb)[..., 0], mask)
+    after = ops.high_frequency_energy(rgb_to_lab(result.image)[..., 0], mask)
+    assert after / before > 0.98
+
+
 # --------------------------------------------------------------------------- lighting
 
 
@@ -532,6 +580,6 @@ def test_skin_cleanup_keeps_moles_and_finds_spots(portrait_paths, analyzer):
 
 def test_registry_contains_every_tool():
     assert set(TOOL_REGISTRY) == {
-        "skin_cleanup", "skin_smoothing", "reduce_dark_circles",
+        "skin_cleanup", "skin_smoothing", "equalize_skin_tone", "reduce_dark_circles",
         "whiten_teeth", "balance_face_lighting",
     }

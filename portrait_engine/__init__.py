@@ -57,6 +57,7 @@ from portrait_engine.perception.face_analyzer import AnalyzerConfig, FaceAnalyze
 from portrait_engine.tools import (
     TOOL_REGISTRY,
     balance_face_lighting,
+    equalize_skin_tone,
     reduce_dark_circles,
     skin_cleanup,
     skin_smoothing,
@@ -91,6 +92,7 @@ __all__ = [
     "balance_face_lighting",
     "decode_bytes",
     "encode_jpeg",
+    "equalize_skin_tone",
     "from_array",
     "load_image",
     "reduce_dark_circles",

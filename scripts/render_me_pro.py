@@ -9,21 +9,18 @@ tool delivered 2.6 percent of the measured deficit, so that number carried no me
 `docs/ALGORITHMS.md` section 3.
 
     python scripts/render_me_pro.py me.jpeg --dark-circles 0.85 --ladder
+
+Since `equalize_skin_tone` was promoted into the engine, the whole recipe is reachable through
+the CLI and the API too. This script stays because it also renders the comparisons.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
-import sys
 from dataclasses import replace
 
 import cv2
 import numpy as np
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from experiment_skin_tone_equalize import equalize_skin_tone
 
 from portrait_engine import FaceAnalyzer, load_image, save_image
 from portrait_engine.core.config import DEFAULT_CONFIG
@@ -33,6 +30,7 @@ from portrait_engine.tools.dark_circles import reduce_dark_circles
 from portrait_engine.tools.face_lighting import balance_face_lighting
 from portrait_engine.tools.skin_cleanup import skin_cleanup
 from portrait_engine.tools.skin_smoothing import skin_smoothing
+from portrait_engine.tools.skin_tone import equalize_skin_tone
 from portrait_engine.tools.teeth_whitening import whiten_teeth
 
 #: Wider and stronger on chroma than the engine default, gentler on the mid band. This is what
@@ -62,10 +60,8 @@ def render(path: str, dark_circles: float) -> tuple[np.ndarray, dict]:
     step = skin_smoothing(rgb, analysis, 0.55, config=PRO_SKIN)
     rgb, stats["skin_smoothing"] = step.image, step.stats
 
-    # Experimental, still outside the engine. It is the only thing here that addresses *regional*
-    # redness; `skin_smoothing` cannot, because when a whole cheek is uniformly red the local
-    # mean is red too. See `scripts/experiment_skin_tone_equalize.py`.
-    rgb = equalize_skin_tone(rgb, analysis.masks["skin"], analysis, 0.60)
+    step = equalize_skin_tone(rgb, analysis, 0.60)
+    rgb, stats["equalize_skin_tone"] = step.image, step.stats
 
     step = reduce_dark_circles(rgb, analysis, dark_circles)
     rgb, stats["reduce_dark_circles"] = step.image, step.stats
@@ -76,13 +72,10 @@ def render(path: str, dark_circles: float) -> tuple[np.ndarray, dict]:
     step = balance_face_lighting(rgb, analysis, 0.15)
     rgb, stats["balance_face_lighting"] = step.image, step.stats
 
-    # `equalize_skin_tone` is not a registered tool, so it is not named here. It writes only
-    # inside `masks["skin"]`, which `skin_smoothing` already contributes to the permitted
-    # region, so the leak check stays honest.
     stats["diagnostics"] = summarize(
         image.rgb, rgb, analysis,
-        ("skin_cleanup", "skin_smoothing", "reduce_dark_circles", "whiten_teeth",
-         "balance_face_lighting"),
+        ("skin_cleanup", "skin_smoothing", "equalize_skin_tone", "reduce_dark_circles",
+         "whiten_teeth", "balance_face_lighting"),
         detector=analyzer.detector,
     )
     return rgb, stats

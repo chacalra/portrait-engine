@@ -34,6 +34,7 @@ from portrait_engine.perception.face_analyzer import AnalyzerConfig
 STRENGTH_FLAGS: tuple[tuple[str, str, float], ...] = (
     ("--skin-cleanup", "skin_cleanup", 0.0),
     ("--skin-smoothing", "skin_smoothing", 0.0),
+    ("--skin-tone", "skin_tone", 0.0),
     ("--dark-circles", "dark_circles", 0.0),
     ("--teeth-whitening", "teeth_whitening", 0.0),
     ("--face-lighting", "face_lighting", 0.0),
@@ -43,6 +44,7 @@ STRENGTH_FLAGS: tuple[tuple[str, str, float], ...] = (
 PRESET_NATURAL = {
     "skin_cleanup": 0.15,
     "skin_smoothing": 0.20,
+    "skin_tone": 0.20,
     "dark_circles": 0.15,
     "teeth_whitening": 0.10,
     "face_lighting": 0.10,

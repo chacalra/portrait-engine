@@ -9,12 +9,14 @@ from portrait_engine.tools.dark_circles import reduce_dark_circles
 from portrait_engine.tools.face_lighting import balance_face_lighting
 from portrait_engine.tools.skin_cleanup import skin_cleanup
 from portrait_engine.tools.skin_smoothing import skin_smoothing
+from portrait_engine.tools.skin_tone import equalize_skin_tone
 from portrait_engine.tools.teeth_whitening import whiten_teeth
 
 __all__ = [
     "TOOL_REGISTRY",
     "ToolSpec",
     "balance_face_lighting",
+    "equalize_skin_tone",
     "reduce_dark_circles",
     "skin_cleanup",
     "skin_smoothing",

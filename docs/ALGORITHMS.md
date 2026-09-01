@@ -511,6 +511,46 @@ distance a spot is only a couple of pixels across and is not separable from text
 
 ---
 
+## 5c. `equalize_skin_tone`
+
+```
+target = percentile(a, skin, 50)
+field  = NLP(a, skin, 0.30*IOD)                  # normalized low-pass over the skin only
+a'     = a + clip(s * (target - field), -8, +8)
+b'     likewise.   L is copied through untouched.
+```
+
+Promoted from `scripts/` into the engine on 2026-08-31. It corrects **regional** colour, which
+`skin_smoothing` structurally cannot: that tool pulls each pixel toward its own local mean, and
+when a whole cheek is uniformly red the local mean is red too, so there is nothing to pull
+toward. Measured on a portrait with ruddy cheeks, region range of median `a*` 6.5 originally:
+5.8 with the default chroma radius, 4.5 with the chroma radius widened to 0.45 and attenuation
+0.90, **3.2** with this. Widening the radius is not a fix, it is a weaker version of the wrong
+operation.
+
+Two properties make it safe, and both are structural rather than tunable limits:
+
+* **`L*` is never written.** Modelling, texture and the three-dimensional form of the face are
+  untouched by construction. A test pins it (`test_skin_tone_never_touches_luminance`), and that
+  test matters more than it looks: a tool that writes a smooth low-frequency field to `L*` over
+  the skin *is* a dodge-and-burn operator, which is exactly the photometric reshaping section 5b
+  exists to prevent. This tool stays on the safe side of that line by only ever touching chroma.
+* **The field is low-frequency**, so detail cannot change. Measured pore energy 4.91 to 4.91,
+  unchanged to three significant figures at every strength.
+
+Runs after `skin_smoothing`, because it fixes what smoothing cannot, and before
+`reduce_dark_circles`, because that measures its reference against cheek colour and a settled
+cheek is a more stable reference.
+
+**A guardrail caught the first implementation.** `_region_spread` originally probed five discs at
+landmark positions (forehead, nose, both cheeks, a temple) to report the defect as one number.
+`test_tools_read_only_masks_and_geometry_from_the_analysis` rejected it, correctly: a tool that
+can index `analysis.landmarks` can impose a geometric profile. The replacement measures the 5th
+to 95th percentile range of the low-frequency field itself, which needs no landmarks and is a
+better metric anyway, because it covers the whole skin instead of five sample points.
+
+---
+
 ## 5b. Photometric reshaping, and three detectors that did not work
 
 Recorded because the negative result is the useful part, and because it is the kind of thing

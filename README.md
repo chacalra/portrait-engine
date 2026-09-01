@@ -21,6 +21,7 @@ Five capabilities, chosen to be good rather than numerous:
 |---|---|---|
 | `skin_cleanup` | reduces small temporary imperfections by repairing only the smooth surface under each spot and reinjecting the original texture | remove moles or freckles, destroy pores, clone-stamp |
 | `skin_smoothing` | attenuates the mid-frequency band of skin luminance and the unevenness of chroma | touch the fine band, so pores survive at any strength |
+| `equalize_skin_tone` | shifts the low-frequency colour field toward the face's own median, correcting a ruddy cheek or a sallow temple | touch `L*`, so modelling, texture and facial form are untouched by construction |
 | `reduce_dark_circles` | corrects the low-frequency luminance and color deficit under the eye, relative to the neighbouring cheek | flatten the eye area, erase the eye bag or the creases |
 | `whiten_teeth` | reduces the yellow cast multiplicatively and lifts luminance into the remaining headroom | reach pure white, touch lips or gums, flatten inter-tooth shading |
 | `balance_face_lighting` | applies a bounded, smooth photometric gain in linear light | relight generatively, produce an HDR look, clip highlights |
@@ -188,7 +189,7 @@ they passed.
 ```bash
 python scripts/fetch_test_images.py     # CC-licensed evaluation portraits into data/input/
 
-pytest                                  # 213 tests, about 35 seconds
+pytest                                  # 229 tests, about 36 seconds
 pytest -m "not slow"                    # skip the ones needing real photos
 ruff check portrait_engine scripts tests
 

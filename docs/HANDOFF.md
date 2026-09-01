@@ -31,7 +31,7 @@ Twenty non-negotiables were set by the user. The ones that constrain design deci
 
 ## 2. Current state
 
-Complete and verified. `211 passed` in about 35 seconds, `ruff` clean.
+Complete and verified. `229 passed` in about 35 seconds, `ruff` clean.
 
 ```
 portrait_engine/
@@ -46,8 +46,8 @@ scripts/       fetch_test_images, evaluate_folder, render_me_pro, experiment_por
 tests/         7 files
 ```
 
-Five tools: `skin_cleanup`, `skin_smoothing`, `reduce_dark_circles`, `whiten_teeth`,
-`balance_face_lighting`. Perception is MediaPipe Face Landmarker (478 points, Apache-2.0) plus a
+Six tools: `skin_cleanup`, `skin_smoothing`, `equalize_skin_tone`, `reduce_dark_circles`,
+`whiten_teeth`, `balance_face_lighting`. Perception is MediaPipe Face Landmarker (478 points, Apache-2.0) plus a
 per-image skin color model. The BiSeNet parsing backend exists but is off and ships no weights.
 
 Three architectural rules that must not be broken:
@@ -147,7 +147,10 @@ conflict with any non-negotiable, fits the mask contract unchanged. Awaiting the
 
 ## 6. Open decisions awaiting the user
 
-0. **Facial reshaping as a v2 product.** Decided: out of scope for v1, and the photometric
+0. **Promote `equalize_skin_tone`.** Done 2026-08-31. It is the sixth registered tool, so the
+   full professional recipe is now reachable through `PortraitEngine`, the CLI (`--skin-tone`)
+   and the API, byte-identical to what the script produced. See `docs/ALGORITHMS.md` 5c.
+0b. **Facial reshaping as a v2 product.** Decided: out of scope for v1, and the photometric
    loophole is now closed. See section 8b. Nothing to do unless the user reopens it.
 1. **How to expose the porcelain look**, if at all. My recommendation: a skin-look registry
    (`natural` default, `porcelain` preset) plus a `skin_glow` tool for the bloom, both visible in
@@ -155,7 +158,7 @@ conflict with any non-negotiable, fits the mask contract unchanged. Awaiting the
    natural" because the future agent will rely on that contract, and it is the anchor for
    non-negotiable 12. `crease_soften` stays out of the engine. A question was asked and the user
    did not answer it; do not assume.
-2. **Whether to promote `equalize_skin_tone`** into the engine as a sixth tool. Recommended yes.
+2. ~~Whether to promote `equalize_skin_tone`.~~ Done, see item 0.
 3. Where working outputs should be written by default so they are visible and optionally
    versionable (`results/`?). Currently the CLI writes to `output/`, which is git-ignored.
 

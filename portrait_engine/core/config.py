@@ -27,6 +27,11 @@ from dataclasses import dataclass, field
 DEFAULT_ORDER: tuple[str, ...] = (
     "skin_cleanup",
     "skin_smoothing",
+    # After smoothing, because it corrects what smoothing structurally cannot: a whole cheek
+    # that is uniformly red has a red local mean, so there is nothing local to pull toward.
+    # Before the eye work, because that measures its reference against cheek colour and a
+    # settled cheek is a more stable reference.
+    "equalize_skin_tone",
     "reduce_dark_circles",
     "whiten_teeth",
     "balance_face_lighting",
@@ -158,6 +163,16 @@ class DarkCircleConfig:
 
 
 @dataclass(frozen=True)
+class SkinToneConfig:
+    #: Radius of the regional colour field, as a fraction of the interocular distance. Must be
+    #: large: it has to average over a whole region, not over a blotch. At a small radius this
+    #: degenerates into a weaker copy of `skin_smoothing`, which already does the local job.
+    field_radius: float = 0.30
+    #: Hard ceiling on the a*/b* shift, so a mis-segmented skin mask cannot recolour a face.
+    max_shift: float = 8.0
+
+
+@dataclass(frozen=True)
 class FaceLightingConfig:
     #: Exponent applied to the illumination-flattening gain at strength 1.0. Low on purpose:
     #: fully flattening illumination destroys the three-dimensional form of a face.
@@ -245,6 +260,7 @@ class EngineConfig:
     skin_smoothing: SkinSmoothingConfig = field(default_factory=SkinSmoothingConfig)
     teeth_whitening: TeethWhiteningConfig = field(default_factory=TeethWhiteningConfig)
     dark_circles: DarkCircleConfig = field(default_factory=DarkCircleConfig)
+    skin_tone: SkinToneConfig = field(default_factory=SkinToneConfig)
     face_lighting: FaceLightingConfig = field(default_factory=FaceLightingConfig)
     skin_cleanup: SkinCleanupConfig = field(default_factory=SkinCleanupConfig)
     order: tuple[str, ...] = DEFAULT_ORDER

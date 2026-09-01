@@ -9,6 +9,7 @@ The tools stay usable on their own. Nothing in a tool knows the engine exists.
 
 from __future__ import annotations
 
+import inspect
 import os
 from collections.abc import Mapping
 from typing import Any
@@ -33,6 +34,8 @@ from portrait_engine.tools.base import validate_strength
 STRENGTH_ALIASES: dict[str, str] = {
     "skin_cleanup": "skin_cleanup",
     "skin_smoothing": "skin_smoothing",
+    "skin_tone": "equalize_skin_tone",
+    "equalize_skin_tone": "equalize_skin_tone",
     "dark_circles": "reduce_dark_circles",
     "reduce_dark_circles": "reduce_dark_circles",
     "teeth_whitening": "whiten_teeth",
@@ -211,7 +214,10 @@ class PortraitEngine:
         kwargs: dict[str, Any] = {"strict": strict, "debug": debug}
         if tool_config is not None:
             kwargs["config"] = tool_config
-        if name != "whiten_teeth":  # the only tool with no guided-filter subsampling
+        # Driven by the signature rather than by a list of exceptions. Not every tool has a
+        # guided filter to subsample, and a hardcoded name here silently breaks the next tool
+        # that does not take this argument.
+        if "subsample" in inspect.signature(spec.fn).parameters:
             kwargs["subsample"] = self.config.subsample
         return spec.fn(rgb, analysis, strength, **kwargs)
 
@@ -220,6 +226,7 @@ class PortraitEngine:
 _CONFIG_ATTR: dict[str, str] = {
     "skin_cleanup": "skin_cleanup",
     "skin_smoothing": "skin_smoothing",
+    "equalize_skin_tone": "skin_tone",
     "reduce_dark_circles": "dark_circles",
     "whiten_teeth": "teeth_whitening",
     "balance_face_lighting": "face_lighting",
