@@ -20,7 +20,13 @@ classifiers = [
 
 dependencies = [
     "numpy>=1.24",
-    "opencv-python>=4.10",
+    # `opencv-contrib-python`, not `opencv-python`. Both install the same `cv2` package, so
+    # having both present makes the resolved import depend on install order. MediaPipe declares
+    # `opencv-contrib-python` as a hard dependency, so that one is arriving whatever we ask for;
+    # declaring it ourselves leaves exactly one provider instead of two. Verified: their bundled
+    # `.libs` directories are byte-identical (same sha256), so contrib adds no extra binaries and
+    # no extra licence exposure. We call nothing from the contrib modules.
+    "opencv-contrib-python>=4.10",
     "mediapipe>=0.10.18",
     "pillow>=10.0",
 ]

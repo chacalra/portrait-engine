@@ -20,7 +20,7 @@ which are the highest-risk item.
 | package | version | license | purpose | code reused |
 |---|---|---|---|---|
 | [numpy](https://numpy.org) | >=1.24 | BSD-3-Clause | array math, the canonical buffer | no, used as a library |
-| [opencv-python](https://github.com/opencv/opencv-python) | >=4.10 | Apache-2.0 | box/Gaussian filters, color conversion, morphology, polygon fill, connected components | no, used as a library |
+| [opencv-contrib-python](https://github.com/opencv/opencv-python) | >=4.10 | Apache-2.0, **plus bundled LGPL binaries, see below** | box/Gaussian filters, color conversion, morphology, polygon fill, connected components, `remap` | no, used as a library |
 | [mediapipe](https://github.com/google-ai-edge/mediapipe) | >=0.10.18 | Apache-2.0 | Face Landmarker inference | no, used as a library |
 | [pillow](https://python-pillow.org) | >=10.0 | MIT-CMU (PIL license) | image IO with EXIF/ICC preservation and EXIF orientation | no, used as a library |
 
@@ -38,10 +38,41 @@ All four are permissive and compatible with a proprietary commercial product.
 | [ruff](https://docs.astral.sh/ruff/) | >=0.5 | MIT | `dev` | lint |
 | [httpx2](https://pypi.org/project/httpx2/) | any | BSD-3-Clause | `dev` | required by Starlette's `TestClient` |
 
-Deliberately **not** dependencies: PyTorch, `opencv-contrib-python`, PyWavelets, dlib,
-InsightFace, scikit-image, and any CLI framework. Reasons in `docs/RESEARCH.md`. The guided
-filter is implemented in-repo rather than taken from `cv2.ximgproc`, which removes the need for
-`opencv-contrib-python` entirely.
+Deliberately **not** dependencies: PyTorch, PyWavelets, dlib, InsightFace, scikit-image, scipy,
+and any CLI framework. Reasons in `docs/RESEARCH.md`.
+
+### Correction, 2026-08-31: we ship `opencv-contrib-python`, and we cannot avoid it
+
+This file previously said the in-repo guided filter "removes the need for `opencv-contrib-python`
+entirely". That was wrong. **MediaPipe declares `opencv-contrib-python` as a hard dependency**
+(`Requires-Dist: opencv-contrib-python` in its metadata), so it installs regardless of what we
+ask for. Both packages install the same `cv2` module, so declaring `opencv-python` as well left
+two providers of one import and made the resolved version depend on install order. The dependency
+is now declared as `opencv-contrib-python`, leaving exactly one provider.
+
+What this does and does not change:
+
+- **It adds no binaries and no licence exposure.** Verified directly: `opencv_python.libs` and
+  `opencv_contrib_python.libs` are byte-identical, same sha256 over their contents.
+- **We still call nothing from the contrib modules.** Audited across the whole repository: every
+  one of the ~40 distinct `cv2.*` symbols used is in the base build. The guided filter is still
+  implemented in-repo rather than taken from `cv2.ximgproc`. That decision stands on its merits
+  (it is calibrated against measurements this project recorded) but it is no longer *also* a way
+  to avoid a dependency.
+
+### The OpenCV wheel bundles LGPL components
+
+`Apache-2.0` covers OpenCV's own source. The **wheel** additionally ships prebuilt binaries whose
+licences are in `cv2/LICENSE-3RD-PARTY.txt`, 3617 lines, including the full texts of **LGPL 2.1
+and LGPL 3** and a **Qt 5** notice; the bundled `libavcodec` / `libavformat` / `libavfilter` are
+FFmpeg. Listing this dependency as flatly Apache-2.0 understated a live obligation.
+
+For a closed-source commercial product this is workable but not free of duties: the LGPL parts
+are dynamically linked shared objects, which is the permitted arrangement, and the obligations
+are attribution plus preserving the user's ability to relink. **Do not vendor, statically link or
+repackage these binaries without counsel.** If the obligation is ever unwanted, the escape is a
+headless build of OpenCV without FFmpeg and Qt, which this engine would not miss: it decodes
+images through Pillow and never opens a window.
 
 ---
 
@@ -207,7 +238,7 @@ build, in documentation that is published, or in a model training set.
 
 | item | safe for a closed commercial product |
 |---|---|
-| numpy, opencv-python, mediapipe, pillow | yes (BSD / Apache-2.0 / MIT-CMU) |
+| numpy, opencv-contrib-python, mediapipe, pillow | yes, with the LGPL attribution duty noted above |
 | onnxruntime, fastapi, uvicorn, python-multipart | yes (MIT / BSD / Apache-2.0) |
 | MediaPipe Face Landmarker weights | believed yes (Apache-2.0 model card), **verify** |
 | all code in `portrait_engine/` | yes, written for this project |
