@@ -25,6 +25,7 @@ from portrait_engine.reshaping.base import register_reshape
 from portrait_engine.reshaping.warp import (
     apply_warp,
     displacement_from_handles,
+    jacobian_minimum,
     measure_landmark_shift,
 )
 from portrait_engine.tools.base import no_op, resolve_image, validate_strength
@@ -32,9 +33,16 @@ from portrait_engine.tools.base import no_op, resolve_image, validate_strength
 
 @dataclass(frozen=True)
 class NoseConfig:
-    #: Fraction of the *current* alar width removed at strength 1.0. Relative rather than
-    #: absolute so the same strength means the same thing on a wide and a narrow nose.
-    max_alar_narrowing: float = 0.12
+    #: Fraction of the *current* alar width removed at strength 1.0, **or as much as this face
+    #: can take without approaching a fold, whichever is less**. See `min_jacobian` below.
+    #:
+    #: Raised from 0.12, which was set by judgement rather than measurement and was too timid:
+    #: on the reference portrait 0.12 at strength 0.5 is a 6 percent change that is very hard to
+    #: see. A fixed fraction is the wrong parameterisation on its own, though, because the fold
+    #: limit depends on the individual nose: measured across six portraits, 0.18 at the default
+    #: radius produced a worst-case Jacobian of 0.004 on one of them, one step from melting,
+    #: while the reference portrait sat at a comfortable 0.22. Hence the backoff.
+    max_alar_narrowing: float = 0.18
     #: Support radius of each handle, as a fraction of the interocular distance. With a
     #: compactly supported kernel this is a hard bound: the field is exactly zero beyond it.
     #:
@@ -52,9 +60,16 @@ class NoseConfig:
     #: with the nose or the result has a visible seam.
     region_margin: float = 0.22
     #: Hard rail on displacement, as a fraction of the interocular distance, enforced by
-    #: `apply_warp`. At the default narrowing this leaves roughly 40 percent headroom, so the
+    #: `apply_warp`. Measured worst case across six portraits at full strength: 0.076, so the
     #: rail catches a mistake rather than trimming normal operation.
     max_displacement: float = 0.08
+    #: The operation backs off until the field's minimum Jacobian is at least this. Below about
+    #: 0.1 the warp is close enough to folding that a slightly different face would tip over,
+    #: and local area compression that severe starts to show as a pinched ala. `apply_warp`
+    #: still refuses an actual fold; this is the margin in front of that cliff.
+    min_jacobian: float = 0.25
+    #: How many times to reduce the request when the Jacobian floor is hit.
+    fold_backoff_attempts: int = 5
 
 
 DEFAULT_NOSE_CONFIG = NoseConfig()
@@ -129,28 +144,44 @@ def narrow_nose(
         np.tile(axis, (len(right_indices), 1)),
     ]).astype(np.float32)
 
-    achieved = 0.0
+    # Two nested calibrations. The inner one scales the handle offsets until the *measured*
+    # landmark movement matches the request; the outer one reduces the request itself when the
+    # field would come too close to folding on this particular face.
     dx = dy = contained_x = contained_y = None
-    request = target_reduction / 2.0
-    for _ in range(2):
-        if request <= 0.0:
+    achieved = 0.0
+    fold_limited = False
+    goal = target_reduction
+
+    for attempt in range(config.fold_backoff_attempts):
+        request = goal / 2.0
+        for _ in range(2):
+            if request <= 0.0:
+                break
+            # The field is a *source* offset, so to move a wing toward the midline the field
+            # there must point away from it. Hence the sign flip.
+            offsets = -unit * request
+            dx, dy = displacement_from_handles(shape, handles, offsets, radius)
+            # Measure on the *contained* field but hand `apply_warp` the raw one, because it
+            # applies `region` itself. The first version multiplied here as well, so the
+            # delivered field was `field * region**2`, the same squared-alpha mistake
+            # `reduce_dark_circles` made.
+            contained_x, contained_y = dx * region, dy * region
+            achieved = width_before - _alar_width(
+                landmarks, left_indices, right_indices, axis, dx=contained_x, dy=contained_y
+            )
+            if achieved <= 1e-4:
+                break
+            request *= goal / achieved
+
+        if contained_x is None or achieved <= 1e-4:
             break
-        # The field is a *source* offset, so to move a wing toward the midline the field there
-        # must point away from it. Hence the sign flip.
-        offsets = -unit * request
-        dx, dy = displacement_from_handles(shape, handles, offsets, radius)
-        # Measure on the *contained* field but hand `apply_warp` the raw one, because it applies
-        # `region` itself. The first version multiplied here as well, so the delivered field was
-        # `field * region**2`, the same squared-alpha mistake `reduce_dark_circles` made. It
-        # measured near-zero on this warp because the Jacobian minimum sits where `region` is
-        # already 0 or 1, but it did quietly weaken the correction along the seam.
-        contained_x, contained_y = dx * region, dy * region
-        achieved = width_before - _alar_width(
-            landmarks, left_indices, right_indices, axis, dx=contained_x, dy=contained_y
-        )
-        if achieved <= 1e-4:
+        measured_jacobian = jacobian_minimum(contained_x, contained_y)
+        if measured_jacobian >= config.min_jacobian or attempt == config.fold_backoff_attempts - 1:
             break
-        request *= target_reduction / achieved
+        # Back off. The Jacobian is roughly linear in the displacement for small warps, so
+        # scaling by the shortfall converges quickly; the 0.9 keeps it from oscillating.
+        fold_limited = True
+        goal *= max(0.35, 0.9 * (1.0 - config.min_jacobian) / max(1.0 - measured_jacobian, 1e-6))
 
     if dx is None or achieved <= 1e-4:
         return no_op(rgb, "narrow_nose", params, "the requested change is below one pixel")
@@ -173,6 +204,11 @@ def narrow_nose(
         "narrowing_fraction": round(float((width_before - width_after) / width_before), 4),
         "requested_fraction": round(float(config.max_alar_narrowing * strength), 4),
         "influence_radius_px": radius,
+        # True when this face could not take the full requested narrowing without the field
+        # coming too close to folding. Reported so a caller can tell "this nose cannot take
+        # more" apart from "this setting is too low", the same distinction
+        # `reduce_dark_circles` draws with its gamut headroom.
+        "fold_limited": fold_limited,
     }
     stats.update(report.as_dict())
 

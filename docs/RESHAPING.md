@@ -139,6 +139,41 @@ well as the narrowing, and the achieved reduction overshot the request by about 
 every strength while converging on nothing. This engine has now made that mistake twice; the
 first time was measuring `skin_smoothing` by re-decomposing its own output.
 
+## The ceiling is a property of the face, not a setting
+
+`max_alar_narrowing` was 0.12, chosen by judgement rather than measurement, and it was too timid:
+at strength 0.5 that is a 6 percent change on the reference portrait which is very hard to see.
+
+Raising it to a fixed 0.18 is not safe either, and the measurement is unambiguous. Across six
+portraits at the default radius, 0.18 produced a worst-case minimum Jacobian of **0.004** on one
+face, one step from melting, while the reference portrait sat at a comfortable 0.22. **How far a
+nose can be narrowed before the field folds is a property of that nose**, so a fixed fraction is
+the wrong parameterisation on its own.
+
+The operation now backs off until the measured Jacobian clears `min_jacobian` (0.25), which is
+the margin in front of `apply_warp`'s absolute refusal to fold. Two nested calibrations: the
+inner one scales the handle offsets until the measured landmark movement matches the request,
+the outer one reduces the request itself when this face cannot take it.
+
+| portrait | requested | achieved | min Jacobian | fold-limited |
+|---|---|---|---|---|
+| reference | 0.180 | 0.157 | 0.325 | yes |
+| blonde | 0.180 | **0.180** | 0.268 | no |
+| laotian | 0.180 | 0.122 | 0.325 | yes |
+| laughing woman | 0.180 | 0.139 | 0.325 | yes |
+| woman | 0.180 | 0.152 | 0.325 | yes |
+| young man | 0.180 | 0.143 | 0.325 | yes |
+
+Worst case across all six went from a Jacobian of 0.004 to 0.268, with the leak into eyes and
+lips still 0.00 8-bit levels and the worst displacement 0.055 of the interocular distance against
+a 0.08 rail. `fold_limited` is reported in `stats` so a caller can tell "this nose cannot take
+more" apart from "this setting is too low", the same distinction `reduce_dark_circles` draws with
+its gamut headroom.
+
+**Widening the radius is not the escape.** It does raise the Jacobian, but at radius 0.20 the
+warp starts moving the lips (1.84 levels worst case across the six), because the containment
+region is a dilated nose that reaches them.
+
 ## Why the nose first
 
 It is surrounded by skin on every side, so the warp has nothing awkward to resolve behind it.
