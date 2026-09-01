@@ -31,13 +31,14 @@ Twenty non-negotiables were set by the user. The ones that constrain design deci
 
 ## 2. Current state
 
-Complete and verified. `229 passed` in about 35 seconds, `ruff` clean.
+Complete and verified. `240 passed` in about 35 seconds, `ruff` clean.
 
 ```
 portrait_engine/
   core/        types, colorspace, image, ops, masking, config, pipeline
   perception/  landmark_sets, landmarks, face_parsing (optional, off), masks, face_analyzer
   tools/       base (registry + JSON contracts), 5 tools
+  reshaping/   base (separate registry), warp, nose
   debug/       visualize, recorder
   diagnostics.py, cli.py, api/app.py
 docs/          RESEARCH, ARCHITECTURE, ALGORITHMS, THIRD_PARTY, HANDOFF (this file)
@@ -337,7 +338,19 @@ Output written with `keep_metadata=False`. The source carries EXIF; for a person
 worth stripping, though the engine preserves it by default, which is correct for a professional
 workflow.
 
-## 8b. Facial reshaping: out of scope for v1, deliberately
+## 8b. Facial reshaping: REOPENED and started, 2026-08-31
+
+The user reversed this decision the same day, after the analysis below was written. Reshaping is
+being built now, geometric rather than photometric, in its own registry, starting with the nose.
+See `docs/RESHAPING.md` for the design, the guardrails and the measurements.
+
+What survived the reversal, and matters more than the decision itself: **the six retouching tools
+kept their guarantee intact.** They are still covered by the AST tests, and
+`test_the_two_registries_never_mix` keeps "this run did not move a pixel" a checkable statement
+rather than a claim. The argument below for why that separation matters is the reason it was
+built that way rather than as a seventh tool.
+
+### The original analysis, kept for the record
 
 Decided with the user 2026-08-31.
 
