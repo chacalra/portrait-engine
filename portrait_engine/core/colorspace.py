@@ -22,8 +22,6 @@ import numpy as np
 LUMA_709 = np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)
 
 # CIELAB ranges as produced by OpenCV for float32 input.
-LAB_L_MAX = 100.0
-LAB_AB_RANGE = 127.0
 
 
 def srgb_to_linear(rgb: np.ndarray) -> np.ndarray:
@@ -60,10 +58,6 @@ def rgb_to_ycrcb(rgb: np.ndarray) -> np.ndarray:
     """sRGB-encoded RGB ``[0,1]`` to YCrCb, all channels in ``[0,1]`` (Cr/Cb centered on 0.5)."""
     return cv2.cvtColor(np.ascontiguousarray(rgb, dtype=np.float32), cv2.COLOR_RGB2YCrCb)
 
-
-def lab_chroma(lab: np.ndarray) -> np.ndarray:
-    """C* = hypot(a, b). Chroma magnitude, useful to separate teeth from gums and lips."""
-    return np.hypot(lab[..., 1], lab[..., 2]).astype(np.float32)
 
 
 def soft_highlight_rolloff(x: np.ndarray, knee: float = 0.85) -> np.ndarray:

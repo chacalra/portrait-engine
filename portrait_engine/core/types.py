@@ -139,6 +139,17 @@ class MaskSet(Mapping[str, np.ndarray]):
                 f"mask {key!r} not available; have {sorted(self._masks)}"
             ) from exc
 
+    def __contains__(self, key: object) -> bool:
+        """Explicit, because the inherited one does not work here.
+
+        `Mapping.__contains__` is implemented by calling `__getitem__` and catching `KeyError`.
+        This class raises `MaskContractError` instead, to give a useful message, so the
+        inherited version let that propagate: `"absent" in masks` raised rather than returning
+        False. Every defensive `if name in analysis.masks` in the codebase was silently broken,
+        including the debug recorder's, which is exactly the place that needs it.
+        """
+        return key in self._masks
+
     def __iter__(self) -> Iterator[str]:
         return iter(self._masks)
 

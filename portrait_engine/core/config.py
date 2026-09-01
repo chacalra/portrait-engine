@@ -157,9 +157,6 @@ class DarkCircleConfig:
     #: is a low-frequency field, unlike the pointwise deficit clamp that was removed, so it
     #: bounds the lift without touching texture.
     gamut_headroom_fraction: float = 0.70
-    #: The cheek band used as the "healthy skin" reference, below the under-eye region.
-    reference_offset: float = 0.30
-    reference_height: float = 0.28
 
 
 @dataclass(frozen=True)

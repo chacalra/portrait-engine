@@ -30,7 +30,7 @@ from portrait_engine.debug import visualize as viz
 #: Masks written out by default. The overview composite uses the first five.
 DEFAULT_MASKS: tuple[str, ...] = (
     "skin", "teeth", "left_under_eye", "right_under_eye", "protected",
-    "hair_like", "face_photometric", "mouth_interior", "nostrils", "eyes_dilated",
+    "hair_like", "face_photometric", "mouth_interior", "nostrils",
     "eyebrows", "lips", "nose", "face_oval",
     "left_under_eye_reference", "right_under_eye_reference",
 )

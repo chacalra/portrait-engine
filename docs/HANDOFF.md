@@ -42,8 +42,7 @@ portrait_engine/
   debug/       visualize, recorder
   diagnostics.py, cli.py, api/app.py
 docs/          RESEARCH, ARCHITECTURE, ALGORITHMS, THIRD_PARTY, HANDOFF (this file)
-scripts/       fetch_test_images, evaluate_folder, render_me_pro, experiment_porcelain,
-               experiment_skin_tone_equalize
+scripts/       fetch_test_images, evaluate_folder, render_me_pro, experiment_porcelain
 tests/         7 files
 ```
 
@@ -123,28 +122,8 @@ apparent age, which violates non-negotiable 7 and the "no structural wrinkle rem
 Without it, porcelain is convincing on subjects with little structural wrinkling and uncanny on
 those without (smooth skin, intact crow's feet).
 
-### `experiment_skin_tone_equalize.py`
+Superseded: `equalize_skin_tone` was promoted into the engine on 2026-08-31 and the experiment script was deleted. Its measurements live in `docs/ALGORITHMS.md` section 5c.
 
-`equalize_skin_tone`: pulls the very-low-frequency chroma field of the skin toward the face's own
-median. **This is a genuine missing capability, not a tuning gap.** `skin_smoothing` pulls each
-pixel toward its *local* mean, which does nothing when a whole cheek is uniformly ruddy, because
-the local mean is ruddy too. Measured on the user's own photo (a* by region: forehead 14.2,
-temple 13.4, nose 18.4, cheeks 19.9 and 19.3):
-
-| approach | region range |
-|---|---|
-| original | 6.5 |
-| `skin_smoothing` at default chroma settings | 5.8 |
-| `skin_smoothing`, `radius_chroma` 0.45, attenuation 0.90 | 4.5 |
-| `equalize_skin_tone` at 0.9 | **3.2** |
-
-Pore energy unchanged at every strength (4.91 to 4.91). Only `a*` and `b*` move; `L*` is not
-touched. Because the target is the face's own median rather than a neutral, the face-to-ear
-relationship does not change (measured -1.6 before and after), so it does not create the
-"corrected face, red ears" mismatch.
-
-**Recommendation already given to the user: add this as a sixth tool.** About 20 lines, no
-conflict with any non-negotiable, fits the mask contract unchanged. Awaiting their go-ahead.
 
 ## 6. Open decisions awaiting the user
 

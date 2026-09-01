@@ -447,8 +447,6 @@ def build_masks(
     face_oval = _fill_ring(shape, _ring(landmarks, ls.FACE_OVAL))
     left_eye = _fill_ring(shape, _ring(landmarks, ls.LEFT_EYE))
     right_eye = _fill_ring(shape, _ring(landmarks, ls.RIGHT_EYE))
-    left_iris = _fill_ring(shape, _ring(landmarks, ls.LEFT_IRIS))
-    right_iris = _fill_ring(shape, _ring(landmarks, ls.RIGHT_IRIS))
     left_brow = _fill_ring(shape, _ring(landmarks, ls.LEFT_EYEBROW))
     right_brow = _fill_ring(shape, _ring(landmarks, ls.RIGHT_EYEBROW))
     lips_outer = _fill_ring(shape, _ring(landmarks, ls.LIPS_OUTER))
@@ -577,23 +575,25 @@ def build_masks(
         1.0,
     )
 
+    # The mask set is a published contract and the debug inspection surface, not merely what the
+    # tools happen to read, so per-side masks stay even where only their union is consumed.
+    #
+    # Five that were neither in the contract nor read by anything were removed: `skin_wide`,
+    # `eyes_dilated`, `left_iris`, `right_iris` and `lips_outer`. At native resolution each was
+    # 46 MB of float32 held for the lifetime of every `FaceAnalysis`, so that is 231 MB back.
+    # They are still built as local intermediates where needed and freed with this function.
     masks = MaskSet(
         {
             "face_oval": face_oval,
             "skin": skin,
-            "skin_wide": np.clip(skin_raw, 0.0, 1.0),
             "protected": protected,
             "left_eye": left_eye,
             "right_eye": right_eye,
             "eyes": np.maximum(left_eye, right_eye),
-            "eyes_dilated": eyes_dilated,
-            "left_iris": left_iris,
-            "right_iris": right_iris,
             "left_eyebrow": left_brow,
             "right_eyebrow": right_brow,
             "eyebrows": np.maximum(left_brow, right_brow),
             "lips": lips,
-            "lips_outer": lips_outer,
             "mouth_interior": mouth_interior,
             "teeth": teeth,
             "nose": nose,
