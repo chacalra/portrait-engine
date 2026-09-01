@@ -99,6 +99,51 @@ def test_jacobian_is_one_for_the_identity():
     assert abs(jacobian_minimum(zero, zero) - 1.0) < 1e-4
 
 
+def test_the_field_reproduces_each_handle_offset(flat):
+    """The property the whole kernel change was for.
+
+    The previous Gaussian scatter over-shot by 1.96x to 2.53x with a spread of 0.57 between the
+    three handles defining a single nose wing, so the wing deformed lumpily instead of sliding.
+    Solving an RBF system instead makes each handle move by exactly what it was asked to move by.
+    The rescaling loop in `nose.py` corrects the aggregate width and structurally cannot correct
+    per-handle inconsistency, which is why this has to hold here rather than downstream.
+    """
+    handles = np.array([[40.0, 40.0], [56.0, 44.0], [70.0, 41.0], [110.0, 90.0]], dtype=np.float32)
+    offsets = np.array([[3.0, 0.0], [3.0, 0.0], [3.0, 0.0], [-2.0, 1.0]], dtype=np.float32)
+    dx, dy = displacement_from_handles((160, 160), handles, offsets, 30)
+    for (hx, hy), (ox, oy) in zip(handles, offsets, strict=True):
+        col, row = int(round(float(hx))), int(round(float(hy)))
+        assert abs(dx[row, col] - ox) < 0.05, f"handle at {hx},{hy}: dx {dx[row, col]:.3f} != {ox}"
+        assert abs(dy[row, col] - oy) < 0.05
+
+
+def test_the_field_has_compact_support(flat):
+    """Zero beyond the radius, exactly. Containment is a property of the kernel, not a mask."""
+    radius = 20
+    handles = np.array([[80.0, 80.0]], dtype=np.float32)
+    dx, dy = displacement_from_handles((160, 160), handles, np.array([[5.0, 0.0]], np.float32), radius)
+    yy, xx = np.mgrid[0:160, 0:160]
+    outside = np.hypot(xx - 80.0, yy - 80.0) > radius + 1
+    assert float(np.abs(dx[outside]).max()) == 0.0
+    assert float(np.abs(dy[outside]).max()) == 0.0
+
+
+def test_coincident_handles_do_not_crash():
+    """Two landmarks on the same pixel make the interpolation matrix singular.
+
+    MediaPipe genuinely returns near-coincident nose-ring landmarks on a steep semi-profile, and
+    `_alar_extremes` picks by axis projection without checking distance. Measured condition
+    number for a coincident pair before the fix: 1.9e17, and `np.linalg.solve` raises. Merging
+    them keeps the intent rather than dropping one of the two.
+    """
+    handles = np.array([[50.0, 50.0], [50.0, 50.0], [90.0, 60.0]], dtype=np.float32)
+    offsets = np.array([[2.0, 0.0], [4.0, 0.0], [-1.0, 0.0]], dtype=np.float32)
+    dx, dy = displacement_from_handles((160, 160), handles, offsets, 25)
+    assert np.isfinite(dx).all() and np.isfinite(dy).all()
+    # The two coincident requests average rather than one winning.
+    assert abs(dx[50, 50] - 3.0) < 0.15
+
+
 # --------------------------------------------------------------------------- narrow_nose
 
 

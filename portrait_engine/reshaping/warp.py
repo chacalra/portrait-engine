@@ -9,20 +9,32 @@ left the geometry alone. See ``docs/RESHAPING.md``.
 How the warp is built
 ---------------------
 Not a general free-form liquify. A displacement field is built from a small set of **handles**:
-landmark positions paired with a target offset. Each handle contributes a Gaussian bump, and the
-field is their sum, so the deformation decays smoothly to nothing away from the handles.
+landmark positions paired with a target offset, interpolated by a **compactly supported radial
+basis function**, Wendland's C2 kernel ``psi(r) = (1-r)^4 (4r+1)`` truncated at ``r >= 1``. It is
+positive definite in R^3 and therefore in R^2, so the interpolation matrix is invertible for any
+set of distinct handles.
 
-The mask primitives in ``core.ops`` are the wrong tool here and were tried first.
+Two properties earn it its place over the alternatives:
+
+* **It reproduces the handle offsets exactly.** Solving ``Phi w = offsets`` means each handle
+  moves by what it was asked to move by, so a wing slides rather than deforming lumpily.
+* **Its support is exactly the union of discs of radius R.** Displacement is identically zero
+  beyond that, so containment is provable from R rather than only verified after the fact.
+
+The first version scattered impulses and blurred them with a Gaussian. That was wrong twice over,
+and the docstring recording its rationale was wrong a third time: it claimed the field
+"under-shoots wherever handles are sparse". Measured on a real portrait at the project's own
+defaults it **over**-shot by 1.96x to 2.53x, with a spread of 0.57 between the three handles that
+define a single nose wing. The two-pass rescale in ``nose.py`` corrected the aggregate width and
+structurally could not correct that inconsistency. The replacement measures 0.99 to 1.01 per
+handle and builds the field about 60 times faster, because it evaluates only inside the handles'
+bounding box instead of convolving the whole frame.
+
+The mask primitives in ``core.ops`` are the wrong tool here and were tried before either version.
 ``normalized_lowpass`` divides by the smoothed weights, so a handful of impulses produce the
-*average of the offsets* across the whole influence area: a plateau with no falloff at all, which
-warps the surrounding face as hard as the nose. And ``blur_mask`` clips its output to ``[0, 1]``,
-which silently truncated every displacement to one pixel. Both are correct for what they were
-built for, masks and illumination, and both are wrong for a vector field.
-
-A smooth displacement field is what makes a warp look like anatomy rather than like a smear. It
-also makes the operation *measurable*, which is what let this module keep the project's
-calibration discipline: an operation states its intent in landmark space ("reduce the alar width
-by 4 percent of the interocular distance") and the result is verified in the same space.
+*average of the offsets* across the whole influence area: a plateau with no falloff at all. And
+``blur_mask`` clips its output to ``[0, 1]``, which silently truncated every displacement to one
+pixel. Both are correct for masks and illumination and wrong for a vector field.
 
 Three guardrails, all enforced in :func:`apply_warp`
 ----------------------------------------------------
@@ -70,63 +82,129 @@ class WarpReport:
         }
 
 
+#: Handles closer together than this fraction of the support radius are merged. Two coincident
+#: handles make the interpolation matrix singular, and MediaPipe genuinely returns near-coincident
+#: nose-ring landmarks on a steep semi-profile, where `_alar_extremes` picks by axis projection
+#: without checking distance. Measured condition number for a coincident pair: 1.9e17.
+HANDLE_MERGE_FRACTION = 0.01
+
+#: Tikhonov ridge added to the diagonal, relative to the mean diagonal. Insurance for handle
+#: configurations that survive merging but are still nearly degenerate.
+RIDGE = 1e-8
+
+
+def wendland(r: np.ndarray) -> np.ndarray:
+    """Wendland's C2 radial basis function, ``(1-r)^4 (4r+1)``, zero for ``r >= 1``.
+
+    Positive definite in R^3 and therefore in R^2, which is what guarantees the interpolation
+    matrix is invertible for distinct handles. Compact support is the property that matters most
+    here: it makes containment a consequence of the radius rather than a mask multiply.
+    """
+    tail = np.clip(1.0 - r, 0.0, None)
+    return (tail**4) * (4.0 * r + 1.0)
+
+
 def displacement_from_handles(
     shape: tuple[int, int],
     handles: np.ndarray,
     offsets: np.ndarray,
     radius: int,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Scatter sparse handle offsets into a dense, smooth displacement field.
+    """Interpolate sparse handle offsets into a dense displacement field with compact support.
 
     Args:
         shape: ``(height, width)``.
         handles: ``(N, 2)`` float pixel coordinates, ``(x, y)``.
         offsets: ``(N, 2)`` float pixel offsets to apply at those handles.
-        radius: influence radius in pixels. Each handle contributes a Gaussian bump of roughly
-            this extent, so larger means a smoother, wider deformation.
+        radius: support radius in pixels. The field is exactly zero beyond this distance from
+            every handle, so it also bounds the region the warp can touch.
 
     Returns:
         ``(dx, dy)``, each ``(H, W)`` float32. These are **source** offsets: the value at a
         destination pixel says where to read from, which is the convention ``cv2.remap`` wants.
 
-    The field is a sum of Gaussians rather than an exact interpolant such as a thin-plate
-    spline. A TPS reproduces the handle offsets exactly and oscillates between them; this
-    under-shoots wherever handles are sparse and stays monotone, which is the safer failure mode
-    on a face. Callers compensate by stating their intent as a measured target and rescaling
-    until the measured landmark movement matches it, which converges in one pass because the
-    field is linear in ``offsets``.
+    Raises:
+        WarpContractError: if the handle configuration is degenerate enough that the
+            interpolation cannot be solved.
+
+    Note on the support radius: enlarging it does **not** improve conditioning, contrary to the
+    usual advice about RBF interpolation. Measured here, ``cond(Phi)`` rises monotonically with
+    the radius: 1.00 at 0.01 of the interocular distance, 9.2 at 0.16, 3.2e4 at 2.56. The
+    guidance in the literature concerns globally supported kernels; for a compactly supported one
+    a larger radius means more handles inside each other's support, which is what raises the
+    condition number. Growing the radius to "fix" conditioning would also destroy the locality
+    that is the whole reason for choosing this kernel.
     """
     height, width = shape
-    scatter = np.zeros((height, width, 2), dtype=np.float32)
+    zero = np.zeros((height, width), dtype=np.float32)
+    points = np.asarray(handles, dtype=np.float64).reshape(-1, 2)
+    values = np.asarray(offsets, dtype=np.float64).reshape(-1, 2)
+    support = float(max(radius, 1))
 
-    placed = 0
-    for (hx, hy), (ox, oy) in zip(handles, offsets, strict=True):
-        col, row = int(round(float(hx))), int(round(float(hy)))
-        if not (0 <= row < height and 0 <= col < width):
-            continue
-        scatter[row, col, 0] += float(ox)
-        scatter[row, col, 1] += float(oy)
-        placed += 1
-
-    if placed == 0:
-        zero = np.zeros((height, width), dtype=np.float32)
+    points, values = _merge_close_handles(points, values, support * HANDLE_MERGE_FRACTION)
+    if points.shape[0] == 0:
         return zero, zero.copy()
 
-    sigma = max(1.0, radius / 2.0)
-    blurred = cv2.GaussianBlur(scatter, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE)
+    distances = np.linalg.norm(points[:, None, :] - points[None, :, :], axis=-1)
+    phi = wendland(distances / support)
+    phi[np.diag_indices_from(phi)] += RIDGE * max(float(np.mean(np.diag(phi))), 1e-12)
+    try:
+        weights = np.linalg.solve(phi, values)
+    except np.linalg.LinAlgError as error:
+        raise WarpContractError(
+            f"the {points.shape[0]} handles are too degenerate to interpolate: {error}. "
+            "This usually means landmarks collapsed onto each other on a steep profile."
+        ) from error
 
-    # A Gaussian kernel sums to one, so an impulse of amplitude A comes back with a peak of
-    # A / (2 pi sigma^2). Measure that peak on a single impulse instead of using the closed
-    # form, so kernel truncation and discretisation cannot bias the amplitude.
-    probe_size = int(max(9, 6 * sigma + 1)) | 1
-    probe = np.zeros((probe_size, probe_size), dtype=np.float32)
-    probe[probe_size // 2, probe_size // 2] = 1.0
-    peak = float(cv2.GaussianBlur(probe, (0, 0), sigma, borderType=cv2.BORDER_REPLICATE).max())
+    # Evaluate only inside the handles' bounding box grown by the support radius. Everything
+    # outside is exactly zero by construction, so convolving the whole frame would be wasted
+    # work; this is where most of the speedup over the previous Gaussian scatter comes from.
+    pad = int(np.ceil(support)) + 2
+    x0 = max(0, int(np.floor(points[:, 0].min())) - pad)
+    x1 = min(width, int(np.ceil(points[:, 0].max())) + pad)
+    y0 = max(0, int(np.floor(points[:, 1].min())) - pad)
+    y1 = min(height, int(np.ceil(points[:, 1].max())) + pad)
+    if x1 <= x0 or y1 <= y0:
+        return zero, zero.copy()
 
-    field = blurred / max(peak, 1e-9)
+    grid_y, grid_x = np.mgrid[y0:y1, x0:x1]
+    patch = np.zeros((y1 - y0, x1 - x0, 2), dtype=np.float64)
+    for (px, py), weight in zip(points, weights, strict=True):
+        r = np.hypot(grid_x - px, grid_y - py) / support
+        basis = wendland(r)
+        patch[..., 0] += weight[0] * basis
+        patch[..., 1] += weight[1] * basis
+
+    dx, dy = zero, zero.copy()
+    dx[y0:y1, x0:x1] = patch[..., 0]
+    dy[y0:y1, x0:x1] = patch[..., 1]
+    return dx, dy
+
+
+def _merge_close_handles(
+    points: np.ndarray, values: np.ndarray, tolerance: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Collapse handles nearer than ``tolerance``, averaging their offsets.
+
+    Without this, two coincident landmarks make ``Phi`` singular and ``np.linalg.solve`` raises.
+    Averaging rather than dropping keeps the intent: two handles asking for the same point to
+    move are one handle asking for the mean of what they wanted.
+    """
+    kept_points: list[np.ndarray] = []
+    kept_values: list[list[np.ndarray]] = []
+    for point, value in zip(points, values, strict=True):
+        for index, existing in enumerate(kept_points):
+            if float(np.linalg.norm(point - existing)) <= tolerance:
+                kept_values[index].append(value)
+                break
+        else:
+            kept_points.append(point)
+            kept_values.append([value])
+    if not kept_points:
+        return np.empty((0, 2)), np.empty((0, 2))
     return (
-        np.ascontiguousarray(field[..., 0], dtype=np.float32),
-        np.ascontiguousarray(field[..., 1], dtype=np.float32),
+        np.stack(kept_points),
+        np.stack([np.mean(group, axis=0) for group in kept_values]),
     )
 
 

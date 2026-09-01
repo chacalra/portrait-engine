@@ -35,9 +35,18 @@ class NoseConfig:
     #: Fraction of the *current* alar width removed at strength 1.0. Relative rather than
     #: absolute so the same strength means the same thing on a wide and a narrow nose.
     max_alar_narrowing: float = 0.12
-    #: Influence radius of each handle, as a fraction of the interocular distance. This is what
-    #: makes the deformation read as anatomy: too small and the alae detach from the cheek, too
-    #: large and the whole midface moves with them.
+    #: Support radius of each handle, as a fraction of the interocular distance. With a
+    #: compactly supported kernel this is a hard bound: the field is exactly zero beyond it.
+    #:
+    #: Re-measured after the kernel changed from a Gaussian scatter to Wendland, because the
+    #: falloff shape is different and the old value carried no evidence for the new one. Across
+    #: six portraits at strength 1.0, raising it improves the minimum Jacobian monotonically
+    #: (0.34 at 0.16, 0.52 at 0.22, 0.65 at 0.30, 0.74 at 0.40) but starts moving features it
+    #: must not touch, because the surrounding `region` mask is a dilated nose that reaches the
+    #: upper lip: worst change inside the eyes or lips is 0.001 8-bit levels at 0.16, 4.1 at
+    #: 0.22, 12.9 at 0.30. Containment wins. 0.16 is the largest value that keeps the leak
+    #: below one level, and 0.34 is a local compression rather than a fold; checked visually on
+    #: the worst fixture, it is not visible.
     influence_radius: float = 0.16
     #: How far past the nose the field is allowed to act. The surrounding skin has to deform
     #: with the nose or the result has a visible seam.
@@ -121,7 +130,7 @@ def narrow_nose(
     ]).astype(np.float32)
 
     achieved = 0.0
-    dx = dy = None
+    dx = dy = contained_x = contained_y = None
     request = target_reduction / 2.0
     for _ in range(2):
         if request <= 0.0:
@@ -130,9 +139,14 @@ def narrow_nose(
         # must point away from it. Hence the sign flip.
         offsets = -unit * request
         dx, dy = displacement_from_handles(shape, handles, offsets, radius)
-        dx, dy = dx * region, dy * region
+        # Measure on the *contained* field but hand `apply_warp` the raw one, because it applies
+        # `region` itself. The first version multiplied here as well, so the delivered field was
+        # `field * region**2`, the same squared-alpha mistake `reduce_dark_circles` made. It
+        # measured near-zero on this warp because the Jacobian minimum sits where `region` is
+        # already 0 or 1, but it did quietly weaken the correction along the seam.
+        contained_x, contained_y = dx * region, dy * region
         achieved = width_before - _alar_width(
-            landmarks, left_indices, right_indices, axis, dx=dx, dy=dy
+            landmarks, left_indices, right_indices, axis, dx=contained_x, dy=contained_y
         )
         if achieved <= 1e-4:
             break
@@ -149,7 +163,9 @@ def narrow_nose(
         strict=strict,
     )
 
-    width_after = _alar_width(landmarks, left_indices, right_indices, axis, dx=dx, dy=dy)
+    width_after = _alar_width(
+        landmarks, left_indices, right_indices, axis, dx=contained_x, dy=contained_y
+    )
     stats: dict[str, Any] = {
         "alar_width_before_px": round(float(width_before), 2),
         "alar_width_after_px": round(float(width_after), 2),
@@ -163,7 +179,7 @@ def narrow_nose(
     debug_images: dict[str, np.ndarray] = {}
     if debug:
         debug_images["warp_region"] = region
-        magnitude = np.sqrt(dx * dx + dy * dy)
+        magnitude = np.sqrt(contained_x * contained_x + contained_y * contained_y)
         debug_images["displacement"] = magnitude / max(float(magnitude.max()), 1e-6)
     return ToolResult(
         image=out, tool="narrow_nose", params=params, stats=stats, changed=True,

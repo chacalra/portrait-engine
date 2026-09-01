@@ -26,33 +26,66 @@ away from reshaping a face nobody asked to reshape.
 
 ## How the warp works
 
-A displacement field built from **handles**: landmark positions paired with a target offset. Each
-handle contributes a Gaussian bump and the field is their sum, so the deformation decays smoothly
-to nothing. `cv2.remap` resamples through it.
+A displacement field built from **handles**: landmark positions paired with a target offset,
+interpolated by a compactly supported radial basis function, Wendland's C2 kernel.
 
 ```
-d(p)   = sum_i offset_i * G_sigma(p - h_i)          sigma = radius / 2
-out(p) = rgb(p + d(p) * region(p))
+psi(r) = (1-r)^4 (4r+1),  zero for r >= 1        positive definite in R^3, hence in R^2
+Phi_ij = psi(|h_i - h_j| / R)                    N x N, N is 4 to 30
+w      = solve(Phi, offsets)                     microseconds
+d(p)   = sum_j w_j psi(|p - h_j| / R)            evaluated only in the handles' bounding box
+out(p) = rgb(p + d(p) * region(p))               cv2.remap, INTER_CUBIC
 ```
 
-Not a thin-plate spline. A TPS reproduces the handle offsets exactly and oscillates between them;
-this under-shoots where handles are sparse and stays monotone, which is the safer failure mode on
-a face. The under-shoot is not a problem because operations state a **measured target** and
-rescale until the measurement matches, which converges in one pass since the field is linear in
-the offsets.
+Two properties earn it its place:
 
-### The mask primitives are the wrong tool, and were tried first
+* **It reproduces each handle offset exactly**, so a nose wing slides rather than deforming
+  lumpily.
+* **Its support is exactly the union of discs of radius R**, so containment is a property of the
+  kernel rather than only a mask multiply verified afterwards.
 
-* `normalized_lowpass` computes `blur(x*w)/blur(w)`. With a handful of impulses that is the
-  *average of the offsets* over the whole influence area: a plateau with no falloff, which warps
-  the surrounding face as hard as the nose. Measured: the achieved narrowing saturated at 0.046
-  regardless of strength.
-* `blur_mask` clips its output to `[0, 1]`. Applied to a displacement field in pixels it
-  silently truncated every displacement to exactly one pixel, which is what the measurement
-  showed before anyone looked at the code.
+### Two kernels were wrong before this one
 
-Both are correct for what they were built for, masks and illumination. Neither belongs anywhere
-near a vector field.
+**Version 1, the mask primitives.** `normalized_lowpass` computes `blur(x*w)/blur(w)`; with a
+handful of impulses that is the *average of the offsets* over the influence area, a plateau with
+no falloff. And `blur_mask` clips to `[0, 1]`, which silently truncated every displacement to
+exactly one pixel. Both are correct for masks and illumination and wrong for a vector field.
+
+**Version 2, a Gaussian scatter.** Its docstring claimed the field "under-shoots wherever handles
+are sparse and stays monotone, which is the safer failure mode on a face". Measured on a real
+portrait at the project's own defaults, it **over**-shot by 1.96x to 2.53x, with a spread of 0.57
+between the three handles that define one nose wing. A recorded design rationale was factually
+wrong, and the two-pass rescale in `nose.py` corrected the aggregate width while structurally
+unable to correct the per-handle inconsistency underneath it.
+
+| | Gaussian scatter | Wendland RBF |
+|---|---|---|
+| achieved / asked, per handle | 1.96 to 2.53 | 0.99 to 1.01 |
+| spread between handles of one wing | 0.570 | 0.026 |
+| field build, 4160x2774 | 59.4 ms | 0.9 ms |
+| support | unbounded in principle | exactly R |
+
+Not a thin-plate spline either, and not Moving Least Squares. Four separate routes to TPS (scipy,
+numpy, OpenCV's shape module, scikit-image) were researched and all rejected: TPS is globally
+supported, so it contradicts the containment requirement, and three of the four would add a
+dependency to a project that deliberately has four. MLS rigid (Schaefer, McPhail and Warren,
+SIGGRAPH 2006) is the one credible alternative and is worth revisiting **if jaw work produces
+visible shear that Wendland cannot avoid**; it is also globally supported and about 60x slower
+here. If it is ever built, implement from the paper, not from GitHub: the widely referenced
+`imgwarp-opencv` carries LGPL v2 headers on exactly the MLS files despite an MIT root licence
+added ten years later.
+
+### Two traps in the kernel, both measured
+
+* **Enlarging the radius does not improve conditioning.** The usual advice about RBF
+  interpolation concerns globally supported kernels. Here `cond(Phi)` rises monotonically *with*
+  the radius: 1.00 at 0.01 of the interocular distance, 9.2 at 0.16, 3.2e4 at 2.56. Growing R to
+  "fix" conditioning would also destroy the locality that is the reason for choosing the kernel.
+* **Coincident handles make Phi singular** (condition number 1.9e17) and `np.linalg.solve`
+  raises. MediaPipe genuinely returns near-coincident nose-ring landmarks on a steep
+  semi-profile, and `_alar_extremes` selects by axis projection without checking distance.
+  Handles closer than 1 percent of the radius are merged, averaging their offsets, and a ridge
+  covers what survives merging.
 
 ## Three guardrails, all in `apply_warp`
 
@@ -75,13 +108,29 @@ remove 12 percent of the alar width at strength 1.0, and it verifies the result 
 space. What people think of the result is a separate question from whether the tool did what it
 said.
 
-Measured on a portrait at 193 px interocular:
+Measured on a portrait at 193 px interocular, after the kernel change:
 
 | strength | requested | achieved | max displacement | min Jacobian |
 |---|---|---|---|---|
-| 0.3 | 0.0360 | 0.0360 | 2.63 px | 0.900 |
-| 0.6 | 0.0720 | 0.0720 | 5.25 px | 0.801 |
-| 1.0 | 0.1200 | 0.1200 | 8.76 px | 0.668 |
+| 0.3 | 0.0360 | 0.0360 | 2.43 px | 0.845 |
+| 0.6 | 0.0720 | 0.0720 | 4.86 px | 0.690 |
+| 1.0 | 0.1200 | 0.1200 | 8.10 px | 0.483 |
+
+`influence_radius` was re-measured rather than carried over, because the falloff shape changed
+and the old value carried no evidence for the new kernel. Across six portraits at strength 1.0,
+raising it improves the minimum Jacobian monotonically (0.34 at 0.16, 0.52 at 0.22, 0.65 at 0.30,
+0.74 at 0.40) but starts moving features it must not touch, because the surrounding `region` mask
+is a dilated nose that reaches the upper lip: worst change inside the eyes or lips is 0.001 8-bit
+levels at 0.16, 4.1 at 0.22, 12.9 at 0.30. **Containment wins.** 0.16 is the largest value that
+keeps the leak below one level. The resulting 0.34 worst-case Jacobian is a local compression
+rather than a fold, and checked visually on the worst fixture it is not visible.
+
+**Contain once.** The first version multiplied the field by `region` in `nose.py` and then passed
+the same `region` to `apply_warp`, which multiplies again: the delivered field was
+`field * region**2`. This is the same squared-mask mistake `reduce_dark_circles` made with its
+alpha, in a different module, three days apart. It measured near-zero on this warp because the
+Jacobian minimum sits where `region` is already 0 or 1, but it weakened the correction along the
+seam. The operation now measures on the contained field and hands `apply_warp` the raw one.
 
 **Measure both ends the same way.** The first version read the baseline as the full extent of the
 nose ring and the result as the distance between two handle-group means. Two different
