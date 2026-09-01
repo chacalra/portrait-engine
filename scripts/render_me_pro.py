@@ -26,6 +26,7 @@ from portrait_engine import FaceAnalyzer, load_image, save_image
 from portrait_engine.core.config import DEFAULT_CONFIG
 from portrait_engine.debug import visualize as viz
 from portrait_engine.diagnostics import summarize
+from portrait_engine.reshaping.nose import narrow_nose
 from portrait_engine.tools.dark_circles import reduce_dark_circles
 from portrait_engine.tools.face_lighting import balance_face_lighting
 from portrait_engine.tools.skin_cleanup import skin_cleanup
@@ -46,7 +47,7 @@ PRO_SKIN = replace(
 )
 
 
-def render(path: str, dark_circles: float) -> tuple[np.ndarray, dict]:
+def render(path: str, dark_circles: float, nose: float = 0.0) -> tuple[np.ndarray, dict]:
     """Run the recipe. Returns the finished RGB and the per-step stats."""
     image = load_image(path)
     analyzer = FaceAnalyzer()
@@ -72,6 +73,15 @@ def render(path: str, dark_circles: float) -> tuple[np.ndarray, dict]:
     step = balance_face_lighting(rgb, analysis, 0.15)
     rgb, stats["balance_face_lighting"] = step.image, step.stats
 
+    # Reshaping runs LAST and comes from the other registry. Last because the analysis is
+    # computed on the original and stays valid for as long as nothing moves a pixel; warping
+    # first would leave every mask describing geometry that no longer exists. Opt-in because
+    # this is the line the identity guarantee is drawn on: at `nose=0` the result is still
+    # provably the same face, and the six tools above cannot cross it.
+    if nose > 0.0:
+        step = narrow_nose(rgb, analysis, nose)
+        rgb, stats["narrow_nose"] = step.image, step.stats
+
     stats["diagnostics"] = summarize(
         image.rgb, rgb, analysis,
         ("skin_cleanup", "skin_smoothing", "equalize_skin_tone", "reduce_dark_circles",
@@ -85,13 +95,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("image", nargs="?", default="me.jpeg")
     parser.add_argument("--dark-circles", type=float, default=0.85)
+    parser.add_argument("--nose", type=float, default=0.0,
+                        help="geometric nose narrowing, opt-in. 0 keeps the result "
+                             "identity-preserving.")
     parser.add_argument("--output", default="me_pro.jpg")
     parser.add_argument("--ladder", action="store_true",
                         help="also write an under-eye strength ladder at 100 percent")
     args = parser.parse_args()
 
     original = load_image(args.image)
-    rgb, stats = render(args.image, args.dark_circles)
+    rgb, stats = render(args.image, args.dark_circles, args.nose)
 
     # The source carries EXIF. For a personal photo that is worth stripping, even though the
     # engine preserves metadata by default, which is the right default for a real workflow.
@@ -102,7 +115,7 @@ def main() -> None:
     comparison = viz.before_after(
         viz.crop_zoom(original.rgb, analysis, "face"),
         viz.crop_zoom(rgb, analysis, "face"),
-        ("original", f"pro, dark circles {args.dark_circles:.2f}"),
+        ("original", f"pro, ojeras {args.dark_circles:.2f}, nariz {args.nose:.2f}"),
     )
     name = args.output.replace(".jpg", "_comparison.jpg")
     cv2.imwrite(name, cv2.cvtColor(comparison, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 96])
@@ -111,7 +124,7 @@ def main() -> None:
     if args.ladder:
         rows = []
         for value in (0.0, 0.4, 0.7, 1.0):
-            variant, _ = render(args.image, value)
+            variant, _ = render(args.image, value, args.nose)
             strip = _eye_strip(variant, analysis)
             _label(strip, f"dark circles {value:.2f}")
             rows.append(strip)
