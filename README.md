@@ -181,12 +181,17 @@ Also served at `GET /tools`. No agent code lives in this repository.
 
 ## Development
 
+**On a fresh clone, fetch the fixtures first.** No images are tracked in this repository, so
+without this step the tests that need a real photograph skip rather than run, and it looks like
+they passed.
+
 ```bash
-pytest                                  # 207 tests, about 30 seconds
+python scripts/fetch_test_images.py     # CC-licensed evaluation portraits into data/input/
+
+pytest                                  # 213 tests, about 35 seconds
 pytest -m "not slow"                    # skip the ones needing real photos
 ruff check portrait_engine scripts tests
 
-python scripts/fetch_test_images.py     # CC-licensed evaluation portraits into data/input/
 python scripts/evaluate_folder.py data/input data/output/eval --strength-sweep
 ```
 
