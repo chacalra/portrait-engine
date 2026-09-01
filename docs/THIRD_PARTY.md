@@ -30,7 +30,6 @@ All four are permissive and compatible with a proprietary commercial product.
 
 | package | version | license | extra | purpose |
 |---|---|---|---|---|
-| [onnxruntime](https://github.com/microsoft/onnxruntime) | >=1.17 | MIT | `parsing` | runs a BiSeNet face-parsing ONNX model, if the user supplies one |
 | [fastapi](https://fastapi.tiangolo.com) | >=0.110 | MIT | `api` | HTTP adapter |
 | [uvicorn](https://www.uvicorn.org) | >=0.29 | BSD-3-Clause | `api` | ASGI server |
 | [python-multipart](https://github.com/Kludex/python-multipart) | >=0.0.9 | Apache-2.0 | `api` | multipart upload parsing |
@@ -99,22 +98,22 @@ constants can no longer be imported at runtime. **This is index data derived fro
 licensed source**, which the Apache-2.0 license permits with attribution; that attribution is
 this paragraph and the module docstring.
 
-### BiSeNet face parsing (optional, off by default, no weights provided)
+### BiSeNet face parsing: removed 2026-09-01
 
-| | |
-|---|---|
-| reference implementation | [zllrunning/face-parsing.PyTorch](https://github.com/zllrunning/face-parsing.PyTorch) |
-| code license | MIT |
-| **training data** | CelebAMask-HQ, whose dataset license is **non-commercial research only** |
-| weights in this repo | none |
-| how to enable | `PORTRAIT_ENGINE_PARSING_MODEL=/path/to/bisenet.onnx`, plus `--use-parsing` |
-| code reused | none. `perception/face_parsing.py` is an ONNX Runtime wrapper written from scratch; only the 19-class label order is used, which is dataset metadata. |
+The optional BiSeNet backend and its `onnxruntime` extra have been **deleted from the project**.
 
-**This is the single highest licensing risk in the project.** The code is MIT, but a model
-trained on a non-commercially-licensed dataset carries that dataset's restriction in most
-readings. The engine therefore does not depend on it: the landmark-based masks are the default
-and the product works without it. `face_parsing.py` raises an error with this warning if it is
-enabled without a model.
+It was off by default, shipped no weights, and was never exercised in any run or test. Its
+reference implementation is MIT, but the weights everyone actually uses are trained on
+CelebAMask-HQ, whose dataset licence is **non-commercial research only**, and a model trained on
+non-commercially-licensed data carries that restriction in most readings. This was recorded here
+as the single highest licensing risk in the project.
+
+Keeping a dead module that is also a legal liability had no upside: the landmark-based masks are
+the default, the engine works without it, and re-adding it is one `git revert`. The removal
+deletes `perception/face_parsing.py`, the `use_parsing` and `parsing_model` options, the
+`--use-parsing` flag, the `parsing_backend` field on `FaceAnalysis`, and the `parsing` extra.
+
+**The project now has no non-commercial licensing exposure of any kind.**
 
 If a commercially usable face-parsing model is needed later, the options are to train one on a
 permissively licensed dataset, to license weights commercially, or to keep improving the
@@ -239,9 +238,9 @@ build, in documentation that is published, or in a model training set.
 | item | safe for a closed commercial product |
 |---|---|
 | numpy, opencv-contrib-python, mediapipe, pillow | yes, with the LGPL attribution duty noted above |
-| onnxruntime, fastapi, uvicorn, python-multipart | yes (MIT / BSD / Apache-2.0) |
+| fastapi, uvicorn, python-multipart | yes (MIT / BSD / Apache-2.0) |
 | MediaPipe Face Landmarker weights | believed yes (Apache-2.0 model card), **verify** |
 | all code in `portrait_engine/` | yes, written for this project |
 | FaceMesh index tuples | yes, derived from Apache-2.0 source, attributed |
-| BiSeNet weights | **no** as commonly distributed (CelebAMask-HQ is non-commercial). Off by default, not shipped. |
+| BiSeNet weights | n/a. The backend was removed on 2026-09-01; see above. |
 | test fixtures in `data/` | not for redistribution (CC BY-SA share-alike) |

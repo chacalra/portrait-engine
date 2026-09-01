@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
 authors = [{ name = "Alma Franca" }]
-keywords = ["portrait", "retouching", "computer-vision", "image-processing", "face-parsing"]
+keywords = ["portrait", "retouching", "computer-vision", "image-processing"]
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
@@ -32,13 +32,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Optional BiSeNet face-parsing backend. Review the weight license before commercial use;
-# see docs/THIRD_PARTY.md.
-parsing = ["onnxruntime>=1.17"]
 api = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9"]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.5"]
 all = [
-    "onnxruntime>=1.17",
     "fastapi>=0.110",
     "uvicorn>=0.29",
     "python-multipart>=0.0.9",

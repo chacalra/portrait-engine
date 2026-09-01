@@ -13,6 +13,9 @@ y por qué. Es la base de `docs/ARCHITECTURE.md` y `docs/ALGORITHMS.md`.
 |---|---|---|
 | Percepción principal | MediaPipe Face Landmarker (478 puntos) | Apache-2.0, sin restricción comercial, un solo modelo da bbox, landmarks densos e iris. Wheel `py3-none-manylinux` (funciona en Python 3.13). |
 | Face parsing semántico | BiSeNet ONNX como backend **opcional y desactivado por defecto** | El código es MIT pero los pesos habituales se entrenan con CelebAMask-HQ, cuyo dataset es no comercial. Riesgo legal real (ver §5). |
+
+> **Nota, 2026-09-01.** Este backend se **eliminó del proyecto**. Estuvo desactivado por defecto desde el primer día, nunca se ejecutó en ninguna prueba y nunca se distribuyeron pesos. Mantener un módulo muerto que además era la mayor exposición legal del repositorio no compensaba. La decisión original de dejarlo opcional se documenta arriba tal como se tomó; ver `docs/THIRD_PARTY.md`.
+
 | Máscaras | Derivadas de landmarks + modelo de probabilidad de piel por imagen + guided feathering | Cubre skin, ojos, cejas, labios, boca, dientes, nariz, contorno y under-eye sin modelos extra. |
 | Filtro base edge-preserving | Guided filter propio (He et al. 2010, implementación en NumPy/`cv2.boxFilter`) | O(1) por píxel, sin halos, sin depender de `opencv-contrib`. |
 | Restauración de textura | Separación de frecuencias en 3 bandas con guided filter | Consciente de bordes; DWT descartado (ver §4.3). |

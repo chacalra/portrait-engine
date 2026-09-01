@@ -258,7 +258,7 @@ def hair_like_mask(
 
     Known limitation: a clean-shaven jaw in deep shadow is partly flagged, which costs a
     little skin-smoothing coverage in a region that has nothing to smooth. This is the weakest
-    part of the perception layer and the first thing the optional BiSeNet backend improves.
+    part of the perception layer.
     """
     lightness = lab[..., 0]
     radius = geometry.scaled(config.hair_texture_radius, 2)

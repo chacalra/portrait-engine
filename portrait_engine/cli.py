@@ -29,7 +29,6 @@ import time
 from portrait_engine import __version__
 from portrait_engine.core.pipeline import PortraitEngine
 from portrait_engine.core.types import PortraitEngineError
-from portrait_engine.perception.face_analyzer import AnalyzerConfig
 
 STRENGTH_FLAGS: tuple[tuple[str, str, float], ...] = (
     ("--skin-cleanup", "skin_cleanup", 0.0),
@@ -81,11 +80,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-diagnostics", action="store_true",
         help="skip identity-preservation measurement (saves one inference)",
     )
-    parser.add_argument(
-        "--use-parsing", action="store_true",
-        help="enable the optional BiSeNet backend. Review the weight license first "
-             "(see docs/THIRD_PARTY.md).",
-    )
     parser.add_argument("--json", action="store_true", help="print the report as JSON")
     parser.add_argument("--version", action="version", version=f"portrait-engine {__version__}")
     return parser
@@ -110,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     debug_dir = os.path.join(args.output_dir, "debug") if args.debug else None
 
     try:
-        engine = PortraitEngine(analyzer_config=AnalyzerConfig(use_parsing=args.use_parsing))
+        engine = PortraitEngine()
         started = time.perf_counter()
         result = engine.process(
             args.input,
@@ -139,8 +133,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"{args.input} -> {output_path}  ({elapsed:.2f}s)")
     print(f"face: {result.analysis.bbox.width}x{result.analysis.bbox.height}px  "
-          f"interocular {result.analysis.geometry.interocular_px:.0f}px  "
-          f"backend {result.analysis.parsing_backend}")
+          f"interocular {result.analysis.geometry.interocular_px:.0f}px")
     for stage in result.stages:
         state = "applied" if stage.changed else f"skipped ({stage.stats.get('reason', '')})"
         print(f"  {stage.name:22s} {stage.strength:.2f}  {state}")

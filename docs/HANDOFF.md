@@ -36,7 +36,7 @@ Complete and verified. `240 passed` in about 35 seconds, `ruff` clean.
 ```
 portrait_engine/
   core/        types, colorspace, image, ops, masking, config, pipeline
-  perception/  landmark_sets, landmarks, face_parsing (optional, off), masks, face_analyzer
+  perception/  landmark_sets, landmarks, masks, face_analyzer
   tools/       base (registry + JSON contracts), 5 tools
   reshaping/   base (separate registry), warp, nose
   debug/       visualize, recorder
@@ -48,7 +48,8 @@ tests/         7 files
 
 Six tools: `skin_cleanup`, `skin_smoothing`, `equalize_skin_tone`, `reduce_dark_circles`,
 `whiten_teeth`, `balance_face_lighting`. Perception is MediaPipe Face Landmarker (478 points, Apache-2.0) plus a
-per-image skin color model. The BiSeNet parsing backend exists but is off and ships no weights.
+per-image skin color model. The optional BiSeNet parsing backend was removed on 2026-09-01:
+it was never used and carried the project's only non-commercial licensing exposure.
 
 Three architectural rules that must not be broken:
 
@@ -376,4 +377,4 @@ is known work; the difficulty is making it look natural, not making it move.
 - MediaPipe misses small or strongly profile faces. A two-stage detect-then-crop pass would fix
   this and is not implemented.
 - Model weight licensing is documented but not legally verified. See `docs/THIRD_PARTY.md`, in
-  particular the CelebAMask-HQ non-commercial restriction on BiSeNet weights.
+  particular the LGPL binaries bundled in the OpenCV wheel.

@@ -179,7 +179,6 @@ class FaceAnalysis:
     masks: MaskSet
     skin_probability: np.ndarray  # (H, W) float32 in [0, 1]
     geometry: FaceGeometry
-    parsing_backend: str = "landmarks"
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "landmarks", np.ascontiguousarray(self.landmarks, np.float32))
@@ -200,7 +199,6 @@ class FaceAnalysis:
             "landmark_count": int(self.landmarks.shape[0]),
             "geometry": self.geometry.as_dict(),
             "masks": {name: round(self.masks.area(name), 1) for name in sorted(self.masks)},
-            "parsing_backend": self.parsing_backend,
         }
 
 

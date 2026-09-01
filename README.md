@@ -37,7 +37,6 @@ pip install -e .
 
 # optional extras
 pip install -e ".[api]"      # FastAPI adapter
-pip install -e ".[parsing]"  # optional BiSeNet backend, see docs/THIRD_PARTY.md
 pip install -e ".[dev]"      # tests and lint
 ```
 
@@ -217,7 +216,7 @@ percent of the frame's long side. An undecodable or truncated file.
   segmentation by default, so hair is inferred from an anatomical prior (the beard zone and the
   oval rim) plus relative local texture. A clean-shaven jaw in deep shadow is partly excluded
   from the skin mask, which costs a little smoothing coverage in a region that has nothing to
-  smooth. This is the first thing the optional BiSeNet backend improves.
+  smooth.
 - **Blemish detection recall depends on the skin.** Measured with synthetic 10 `L*` spots: 6 of 6
   on smooth young skin, 3 of 6 on heavily freckled skin, 0 of 6 on dark low-contrast skin. The
   detector normalizes by local texture, so on very textured skin a mild spot genuinely is not

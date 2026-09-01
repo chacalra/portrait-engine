@@ -6,14 +6,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from portrait_engine.core import ops
 from portrait_engine.core.image import PortraitImage
 from portrait_engine.core.types import (
     FaceAnalysis,
     MultipleFacesError,
     NoFaceDetectedError,
 )
-from portrait_engine.perception import face_parsing
 from portrait_engine.perception.landmarks import LandmarkDetector
 from portrait_engine.perception.masks import (
     MaskBuildConfig,
@@ -36,8 +34,6 @@ class AnalyzerConfig:
     max_faces: int = 5
     allow_multiple_faces: bool = False
     min_detection_confidence: float = 0.5
-    use_parsing: bool = False
-    parsing_model: str | None = None
     mask_config: MaskBuildConfig = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -55,9 +51,6 @@ class FaceAnalyzer:
     def __init__(self, config: AnalyzerConfig | None = None):
         self.config = config or AnalyzerConfig()
         self._detector = LandmarkDetector.shared(None, self.config.max_faces)
-        self._parser: face_parsing.FaceParser | None = None
-        if self.config.use_parsing:
-            self._parser = face_parsing.BiSeNetParser(self.config.parsing_model)
 
     @property
     def detector(self) -> LandmarkDetector:
@@ -96,11 +89,6 @@ class FaceAnalyzer:
 
         geometry = geometry_from_landmarks(face.landmarks)
         masks, skin_prob, stats = build_masks(rgb, face, geometry, self.config.mask_config)
-        backend = "landmarks"
-
-        if self._parser is not None:
-            masks, skin_prob = self._refine_with_parsing(rgb, masks, skin_prob, geometry)
-            backend = "landmarks+bisenet"
 
         analysis = FaceAnalysis(
             image_shape=shape,
@@ -110,36 +98,6 @@ class FaceAnalyzer:
             masks=masks,
             skin_probability=skin_prob,
             geometry=geometry,
-            parsing_backend=backend,
         )
         object.__setattr__(analysis, "_stats", stats)  # kept for debug reporting
         return analysis
-
-    def _refine_with_parsing(self, rgb, masks, skin_prob, geometry):
-        """Intersect the landmark skin mask with the parsed skin class, and subtract hair.
-
-        Parsing is used to *narrow* masks, never to widen them: a segmentation error should
-        not hand a tool permission to edit somewhere new.
-        """
-        parsed = self._parser.parse(rgb)  # type: ignore[union-attr]
-        feather = geometry.scaled(0.05, 2)
-        extra: dict[str, np.ndarray] = dict(parsed)
-
-        parsed_skin = parsed.get("parsed_skin")
-        parsed_hair = parsed.get("parsed_hair")
-        if parsed_skin is not None:
-            soft_skin = ops.feather_mask(parsed_skin, rgb, feather, eps=1e-3, subsample=2)
-            new_skin = np.clip(masks["skin"] * np.maximum(soft_skin, 0.25), 0.0, 1.0)
-            if parsed_hair is not None:
-                soft_hair = ops.feather_mask(parsed_hair, rgb, feather, eps=1e-3, subsample=2)
-                new_skin = np.clip(new_skin * (1.0 - soft_hair), 0.0, 1.0)
-                extra["hair_like"] = np.clip(
-                    np.maximum(masks["hair_like"], soft_hair), 0.0, 1.0
-                )
-                extra["protected"] = np.clip(
-                    np.maximum(masks["protected"], soft_hair), 0.0, 1.0
-                )
-            extra["skin"] = new_skin
-            skin_prob = np.clip(skin_prob * np.maximum(soft_skin, 0.2), 0.0, 1.0)
-
-        return masks.with_masks(extra), skin_prob

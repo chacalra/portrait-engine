@@ -13,7 +13,7 @@ estado persistente y no llama a ninguna API externa. FastAPI es un adaptador opc
         percepción (una vez)                 edición (N veces, independiente)
    ┌──────────────────────────┐        ┌────────────────────────────────────┐
    │ FaceAnalyzer             │        │ tool(image, analysis, strength)    │
-   │  landmarks + parsing opc │──────▶ │  -> ToolResult(image, stats, dbg)  │
+   │  landmarks               │──────▶ │  -> ToolResult(image, stats, dbg)  │
    │  -> FaceAnalysis         │        └────────────────────────────────────┘
    └──────────────────────────┘                        ▲
                                                        │
@@ -43,7 +43,6 @@ portrait_engine/
 ├── perception/
 │   ├── landmark_sets.py  índices de FaceMesh (anillos ordenados)
 │   ├── landmarks.py      backend MediaPipe -> LandmarkResult
-│   ├── face_parsing.py   backend BiSeNet ONNX opcional (off por defecto)
 │   ├── masks.py          construcción de máscaras y probabilidad de piel
 │   └── face_analyzer.py  FaceAnalyzer
 ├── tools/
@@ -188,7 +187,6 @@ desincronizarse del código. El agente no se implementa aquí.
   C++ y en Accelerate/Metal.
 - El guided filter está implementado sobre `boxFilter`, que es la primitiva más portable.
 - El único modelo es MediaPipe, que ya es TFLite y tiene runtime en iOS/Android.
-- El backend de parsing habla ONNX Runtime.
 - No se hace esta migración ahora.
 
 ## 9. Lo que deliberadamente no está
