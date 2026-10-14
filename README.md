@@ -1,6 +1,6 @@
 # Portrait Retouching Engine
 
-A small, programmable image-processing SDK for professional portrait retouching.
+A programmable image-processing SDK for professional portrait retouching, built around deterministic edits and explicit identity-preservation guardrails.
 
 **AI decides what to edit. Deterministic image tools perform the edit.**
 
@@ -11,11 +11,13 @@ model is involved, and facial geometry is never modified.
 This repository is the tools half of that split. The agent that decides which operations to
 apply is a separate project and is not here.
 
+The portfolio value of this project is not just the visual result: the implementation separates perception from editing, keeps tool behavior reproducible, measures identity-preservation constraints, exposes the engine through CLI/library/HTTP interfaces, and verifies behavior in CI.
+
 ---
 
 ## What it does
 
-Five capabilities, chosen to be good rather than numerous:
+Six capabilities, chosen to be good rather than numerous:
 
 | tool | what it does | what it will not do |
 |---|---|---|
@@ -179,11 +181,12 @@ tool_schemas()
 
 Also served at `GET /tools`. No agent code lives in this repository.
 
-## Development
+## Quality and reproducibility
 
-**On a fresh clone, fetch the fixtures first.** No images are tracked in this repository, so
-without this step the tests that need a real photograph skip rather than run, and it looks like
-they passed.
+GitHub Actions runs Ruff plus the non-network/non-slow test suite on Ubuntu. The workflow also installs the system EGL/OpenGL/GLES libraries required by MediaPipe, so the CI environment exercises the same perception stack rather than silently skipping it for missing native libraries.
+
+**On a fresh clone, fetch the fixtures first.** No evaluation portraits are tracked in this repository, so
+without this step the tests that need a real photograph skip rather than run.
 
 ```bash
 python scripts/fetch_test_images.py     # CC-licensed evaluation portraits into data/input/
@@ -199,6 +202,8 @@ python scripts/evaluate_folder.py data/input data/output/eval --strength-sweep
 difference map and an optional strength sweep, plus `evaluation.csv` with the numeric
 diagnostics. That is the tool for judging a parameter change across a set of portraits rather
 than one favourite photo.
+
+The repository intentionally does not commit portrait fixtures or generated before/after images. This avoids redistributing evaluation photos and keeps the public repository focused on the engine, tests, diagnostics, and reproducible evaluation tooling.
 
 ## Scope and known limits
 
