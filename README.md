@@ -136,8 +136,6 @@ Three rules define the architecture:
 3. **Every pixel written passes through `apply_masked`.** That is the one place original and
    edited pixels are combined, and it is where the identity guardrails live.
 
-State of the project and the current work queue: [docs/HANDOFF.md](docs/HANDOFF.md).
-
 Details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Formulas, parameter meanings and the
 measurements behind every constant in [docs/ALGORITHMS.md](docs/ALGORITHMS.md). What was studied
 and why each choice was made in [docs/RESEARCH.md](docs/RESEARCH.md).
