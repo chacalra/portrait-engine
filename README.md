@@ -189,8 +189,8 @@ without this step the tests that need a real photograph skip rather than run.
 ```bash
 python scripts/fetch_test_images.py     # CC-licensed evaluation portraits into data/input/
 
-pytest                                  # 229 tests, about 36 seconds
-pytest -m "not slow"                    # skip the ones needing real photos
+pytest                                  # full local suite (fetch fixtures first)
+pytest -m "not slow and not network"    # fast CI-style subset
 ruff check portrait_engine scripts tests
 
 python scripts/evaluate_folder.py data/input data/output/eval --strength-sweep
